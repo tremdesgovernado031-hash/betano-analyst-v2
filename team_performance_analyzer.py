@@ -546,4 +546,106 @@ with st.expander("Ver Mais Mercados de Gols (Over/Under 1.5, 3.5, 4.5)"):
         exibir_analise_value(label="Over 1.5 Gols", prob_modelo=probabilidades['OU_O1.5'], odd_betano=odd_betano_over_1_5, bankroll=bankroll_total, is_1x2=False)
     with col_ou_1_5_2:
         odd_betano_under_1_5 = round(simular_fetch_odds(probabilidades['OU_U1.5'], 'OU', VIGORISH_OU), 2)
-        exibir_analise_value(label="Under 1
+        exibir_analise_value(label="Under 1.5 Gols", prob_modelo=probabilidades['OU_U1.5'], odd_betano=odd_betano_under_1_5, bankroll=bankroll_total, is_1x2=False)
+
+    st.markdown("###### Over/Under 3.5")
+    col_ou_3_5_1, col_ou_3_5_2 = st.columns(2)
+    with col_ou_3_5_1:
+        odd_betano_over_3_5 = round(simular_fetch_odds(probabilidades['OU_O3.5'], 'OU', VIGORISH_OU), 2)
+        exibir_analise_value(label="Over 3.5 Gols", prob_modelo=probabilidades['OU_O3.5'], odd_betano=odd_betano_over_3_5, bankroll=bankroll_total, is_1x2=False)
+    with col_ou_3_5_2:
+        odd_betano_under_3_5 = round(simular_fetch_odds(probabilidades['OU_U3.5'], 'OU', VIGORISH_OU), 2)
+        exibir_analise_value(label="Under 3.5 Gols", prob_modelo=probabilidades['OU_U3.5'], odd_betano=odd_betano_under_3_5, bankroll=bankroll_total, is_1x2=False)
+
+    st.markdown("###### Over/Under 4.5")
+    col_ou_4_5_1, col_ou_4_5_2 = st.columns(2)
+    with col_ou_4_5_1:
+        odd_betano_over_4_5 = round(simular_fetch_odds(probabilidades['OU_O4.5'], 'OU', VIGORISH_OU), 2)
+        exibir_analise_value(label="Over 4.5 Gols", prob_modelo=probabilidades['OU_O4.5'], odd_betano=odd_betano_over_4_5, bankroll=bankroll_total, is_1x2=False)
+    with col_ou_4_5_2:
+        odd_betano_under_4_5 = round(simular_fetch_odds(probabilidades['OU_U4.5'], 'OU', VIGORISH_OU), 2)
+        exibir_analise_value(label="Under 4.5 Gols", prob_modelo=probabilidades['OU_U4.5'], odd_betano=odd_betano_under_4_5, bankroll=bankroll_total, is_1x2=False)
+
+# ====================================================================================
+# E. ANÁLISE: HANDICAP ASIÁTICO 0.0 (Empate Anula Aposta)
+# ====================================================================================
+st.markdown("---")
+st.markdown("##### 5. Mercado: Handicap Asiático 0.0 (Empate Anula a Aposta)")
+col_ah1, col_ah2 = st.columns(2)
+
+# AH 0.0 - Casa
+odd_betano_ah0_1 = round(simular_fetch_odds(probabilidades['AH0.0_1'], 'AH0', VIGORISH_BTTS_DC), 2)
+with col_ah1:
+    exibir_analise_value(
+        label=f"{TIME_CASA_EXIBICAO} AH 0.0",
+        prob_modelo=probabilidades['AH0.0_1'],
+        odd_betano=odd_betano_ah0_1,
+        bankroll=bankroll_total,
+        is_1x2=False
+    )
+
+# AH 0.0 - Fora
+odd_betano_ah0_2 = round(simular_fetch_odds(probabilidades['AH0.0_2'], 'AH0', VIGORISH_BTTS_DC), 2)
+with col_ah2:
+    exibir_analise_value(
+        label=f"{TIME_FORA_EXIBICAO} AH 0.0",
+        prob_modelo=probabilidades['AH0.0_2'],
+        odd_betano=odd_betano_ah0_2,
+        bankroll=bankroll_total,
+        is_1x2=False
+    )
+
+
+# ====================================================================================
+# F. ANÁLISE: TOP 3 PLACARES EXATOS
+# ====================================================================================
+st.markdown("---")
+st.markdown("##### 6. Análise: Top 3 Placares Exatos")
+
+top_scores = get_top_n_scores(prob_matrix, n=3)
+
+placar_data = []
+for item in top_scores:
+    prob = item['prob']
+    odd_justa = calcular_odd_justa(prob)
+    # Odd para placares exatos costuma ter um vigorish um pouco maior
+    odd_simulada = round(simular_fetch_odds(prob, 'Placar', VIGORISH_1X2 + 0.02), 2) 
+    
+    prob_implicita = 1 / odd_simulada 
+    value_bet = (prob - prob_implicita) * 100 
+    
+    analise_valor = f"{value_bet:.2f}%"
+    aposta = 0.0
+    
+    if odd_simulada > odd_justa:
+        aposta = calcular_kelly_criterion(prob, odd_simulada, bankroll_total)
+        analise_valor = f"🔥 VALUE BET ({analise_valor})!"
+
+    placar_data.append({
+        "Placar": item['score'],
+        "Prob. IA (%)": round(prob * 100, 2),
+        "Odd Justa": round(odd_justa, 2),
+        "Odd Simulada": odd_simulada,
+        "Análise de Valor": analise_valor,
+        "Aposta Sugerida (R$)": round(aposta, 2) if aposta > 0.0 else "R$ 0.00"
+    })
+
+df_placar = pd.DataFrame(placar_data)
+st.dataframe(df_placar, use_container_width=True, hide_index=True)
+
+
+st.markdown("---")
+st.markdown("#### 🧠 Matriz de Probabilidade de Placar Exato (Modelo Poisson)")
+st.caption("A probabilidade de cada placar (em percentual) com base nas forças ajustadas.")
+
+# Formata a matriz para melhor visualização
+df_prob_matrix = pd.DataFrame(prob_matrix * 100, 
+                              index=[f'{TIME_CASA_EXIBICAO}: {i}' for i in range(prob_matrix.shape[0])], 
+                              columns=[f'{TIME_FORA_EXIBICAO}: {j}' for j in range(prob_matrix.shape[1])])
+
+df_prob_matrix = df_prob_matrix.round(2)
+
+st.dataframe(
+    df_prob_matrix,
+    use_container_width=True,
+)
