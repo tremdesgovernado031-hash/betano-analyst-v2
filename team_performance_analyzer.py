@@ -272,7 +272,7 @@ def calcular_mercados(prob_matrix):
         'OU_O1.5': prob_over_1_5, 'OU_U1.5': prob_under_1_5,
         'OU_O2.5': prob_over_2_5, 'OU_U2.5': prob_under_2_5,
         'OU_O3.5': prob_over_3_5, 'OU_U3.5': prob_under_3_5,
-        'OU_O4.5': prob_over_4.5, 'OU_U4.5': prob_under_4_5,
+        'OU_O4.5': prob_over_4_5, 'OU_U4.5': prob_under_4_5, # <-- VÍRGULA CORRIGIDA AQUI
         'BTTS_Sim': prob_btts_sim, 'BTTS_Nao': prob_btts_nao,
         # Handicap Asiático (AH 0.0 é a mesma coisa que DNB - Draw No Bet: 1X2 sem empate)
         'AH0.0_1': prob_vitoria_casa / prob_dc_12, # Re-normaliza a probabilidade para 12
