@@ -2,44 +2,88 @@ import pandas as pd
 import numpy as np
 import streamlit as st
 from scipy.stats import poisson
+import random
 
 # Configuração da Página Streamlit (A Interface do Aplicativo)
 st.set_page_config(layout="wide", page_title="Betano Analyst AI Prototype - Força Ofensiva")
 
+# --- 0. DEFINIÇÃO DE TIMES ---
+# Listas de Times (Códigos Abreviados para as ligas)
+
+# Brasileirão Série A (20 times)
+BRASILEIRAO_SERIE_A = [
+    'FLA', 'PAL', 'SAO', 'GRE', 'CAP', 'FLU', 'COR', 'INT', 'BOT', 'CAM', 
+    'BAH', 'FOR', 'CRU', 'CUI', 'VAS', 'VIT', 'JUV', 'ATL', 'BGT', 'ECA'
+]
+
+# La Liga Série A (20 times)
+LA_LIGA_SERIE_A = [
+    'RMA', 'BAR', 'ATM', 'GIR', 'ATH', 'RSO', 'BET', 'VAL', 'VIL', 'GET', 
+    'OSA', 'ALA', 'SEV', 'CEL', 'RAY', 'MLG', 'CAD', 'GRA', 'LPA', 'ALM'
+]
+
+# Premier League (20 times)
+PREMIER_LEAGUE = [
+    'MCI', 'LIV', 'ARS', 'TOT', 'CHE', 'MUN', 'NEW', 'WHU', 'AVL', 'WOL', 
+    'CRY', 'BHA', 'BRE', 'EVE', 'FUL', 'NFO', 'BOU', 'LEE', 'BUR', 'SHE' # Usando abreviações comuns
+]
+
+# Lista Total de 60 Times
+TODOS_TIMES = BRASILEIRAO_SERIE_A + LA_LIGA_SERIE_A + PREMIER_LEAGUE
+
 # --- 1. SIMULAÇÃO DE DADOS (Base de Conhecimento da IA) ---
 
+@st.cache_data # Mantém os dados estáveis e evita recalcular em cada interação
 def simular_historico_jogos():
-    """Cria um DataFrame simulando um histórico mais extenso de jogos para cálculo de médias da liga."""
-    # Dados Simulados (expandidos para ter uma base de cálculo de média da liga mais rica)
-    dados = [
-        # Time A (Casa)
-        {'Time': 'Time A', 'Adversario': 'X', 'Gols_Feitos': 2, 'Gols_Sofridos': 1, 'Local': 'C', 'Resultado': 'V'},
-        {'Time': 'Time A', 'Adversario': 'Y', 'Gols_Feitos': 1, 'Gols_Sofridos': 1, 'Local': 'F', 'Resultado': 'E'},
-        {'Time': 'Time A', 'Adversario': 'Z', 'Gols_Feitos': 0, 'Gols_Sofridos': 2, 'Local': 'C', 'Resultado': 'D'},
-        {'Time': 'Time A', 'Adversario': 'W', 'Gols_Feitos': 3, 'Gols_Sofridos': 1, 'Local': 'F', 'Resultado': 'V'},
-        {'Time': 'Time A', 'Adversario': 'V', 'Gols_Feitos': 1, 'Gols_Sofridos': 0, 'Local': 'C', 'Resultado': 'V'},
-        {'Time': 'Time A', 'Adversario': 'T', 'Gols_Feitos': 2, 'Gols_Sofridos': 2, 'Local': 'F', 'Resultado': 'E'},
-        {'Time': 'Time A', 'Adversario': 'S', 'Gols_Feitos': 4, 'Gols_Sofridos': 1, 'Local': 'C', 'Resultado': 'V'},
-        {'Time': 'Time A', 'Adversario': 'R', 'Gols_Feitos': 0, 'Gols_Sofridos': 1, 'Local': 'F', 'Resultado': 'D'},
-        # Time B (Fora)
-        {'Time': 'Time B', 'Adversario': 'P', 'Gols_Feitos': 0, 'Gols_Sofridos': 0, 'Local': 'F', 'Resultado': 'E'},
-        {'Time': 'Time B', 'Adversario': 'Q', 'Gols_Feitos': 4, 'Gols_Sofridos': 2, 'Local': 'C', 'Resultado': 'V'},
-        {'Time': 'Time B', 'Adversario': 'R', 'Gols_Feitos': 1, 'Gols_Sofridos': 3, 'Local': 'F', 'Resultado': 'D'},
-        {'Time': 'Time B', 'Adversario': 'S', 'Gols_Feitos': 2, 'Gols_Sofridos': 1, 'Local': 'C', 'Resultado': 'V'},
-        {'Time': 'Time B', 'Adversario': 'T', 'Gols_Feitos': 0, 'Gols_Sofridos': 1, 'Local': 'F', 'Resultado': 'D'},
-        {'Time': 'Time B', 'Adversario': 'U', 'Gols_Feitos': 3, 'Gols_Sofridos': 0, 'Local': 'C', 'Resultado': 'V'},
-        {'Time': 'Time B', 'Adversario': 'V', 'Gols_Feitos': 1, 'Gols_Sofridos': 1, 'Local': 'F', 'Resultado': 'E'},
-        {'Time': 'Time B', 'Adversario': 'W', 'Gols_Feitos': 2, 'Gols_Sofridos': 0, 'Local': 'C', 'Resultado': 'V'},
-        # Mais jogos aleatórios para média da liga
-        {'Time': 'Time C', 'Adversario': 'D', 'Gols_Feitos': 1, 'Gols_Sofridos': 1, 'Local': 'C', 'Resultado': 'E'},
-        {'Time': 'Time C', 'Adversario': 'E', 'Gols_Feitos': 2, 'Gols_Sofridos': 3, 'Local': 'F', 'Resultado': 'D'},
-        {'Time': 'Time D', 'Adversario': 'C', 'Gols_Feitos': 3, 'Gols_Sofridos': 2, 'Local': 'C', 'Resultado': 'V'},
-        {'Time': 'Time D', 'Adversario': 'E', 'Gols_Feitos': 0, 'Gols_Sofridos': 0, 'Local': 'F', 'Resultado': 'E'},
-    ]
+    """Cria um DataFrame simulando um histórico de jogos extenso e aleatório para todos os 60 times."""
+    
+    dados = []
+    
+    # Geramos um número robusto de jogos (e.g., 600 jogos)
+    NUM_JOGOS_SIMULADOS = 600
+    
+    for _ in range(NUM_JOGOS_SIMULADOS):
+        time_casa = random.choice(TODOS_TIMES)
+        time_fora = random.choice([t for t in TODOS_TIMES if t != time_casa])
+        
+        # Simula resultados de gols com um pequeno viés para o time da casa
+        gols_casa = random.randint(0, 4) if random.random() < 0.7 else random.randint(0, 2)
+        gols_fora = random.randint(0, 2) if random.random() < 0.8 else random.randint(0, 4)
+        
+        if gols_casa > gols_fora:
+            resultado_casa = 'V'
+            resultado_fora = 'D'
+        elif gols_casa == gols_fora:
+            resultado_casa = 'E'
+            resultado_fora = 'E'
+        else:
+            resultado_casa = 'D'
+            resultado_fora = 'V'
+
+        # Adiciona o registro do time da casa
+        dados.append({
+            'Time': time_casa, 
+            'Adversario': time_fora, 
+            'Gols_Feitos': gols_casa, 
+            'Gols_Sofridos': gols_fora, 
+            'Local': 'C', 
+            'Resultado': resultado_casa
+        })
+        
+        # Adiciona o registro do time visitante
+        dados.append({
+            'Time': time_fora, 
+            'Adversario': time_casa, 
+            'Gols_Feitos': gols_fora, 
+            'Gols_Sofridos': gols_casa, 
+            'Local': 'F', 
+            'Resultado': resultado_fora
+        })
 
     df = pd.DataFrame(dados)
     return df
 
+@st.cache_data
 def calcular_forcas(df, time_casa, time_fora):
     """
     Calcula as médias da liga e as forças ofensivas/defensivas (Attack/Defense Strength).
@@ -53,31 +97,32 @@ def calcular_forcas(df, time_casa, time_fora):
     
     # 2. Cálculo das Médias Específicas dos Times
     
-    # Dados do Time de Casa (Time A)
+    # Dados do Time de Casa 
     df_a = df[df['Time'] == time_casa]
     df_a_casa = df_a[df_a['Local'] == 'C']
 
-    # Dados do Time Visitante (Time B)
+    # Dados do Time Visitante 
     df_b = df[df['Time'] == time_fora]
     df_b_fora = df_b[df_b['Local'] == 'F']
+    
+    # Garante que as médias específicas existam (evita divisão por zero ou NaN)
+    media_feita_a = df_a_casa['Gols_Feitos'].mean() if not df_a_casa.empty else media_gols_casa
+    media_sofrida_a = df_a_casa['Gols_Sofridos'].mean() if not df_a_casa.empty else media_gols_fora
+    media_feita_b = df_b_fora['Gols_Feitos'].mean() if not df_b_fora.empty else media_gols_fora
+    media_sofrida_b = df_b_fora['Gols_Sofridos'].mean() if not df_b_fora.empty else media_gols_casa
+
 
     # 3. Cálculo das Forças (STRENGTHS)
     
     # Força Ofensiva do Time A (Casa)
-    attack_a = (df_a_casa['Gols_Feitos'].mean() / media_gols_casa) if media_gols_casa else 1
-    # Força Defensiva do Time A (Casa) - Contra gols sofridos pelo visitante
-    defense_a = (df_a_casa['Gols_Sofridos'].mean() / media_gols_fora) if media_gols_fora else 1
+    attack_a = (media_feita_a / media_gols_casa) if media_gols_casa else 1.0
+    # Força Defensiva do Time A (Casa) - Quanto o adversário sofre em casa vs. média da liga fora
+    defense_a = (media_sofrida_a / media_gols_fora) if media_gols_fora else 1.0
     
     # Força Ofensiva do Time B (Fora)
-    attack_b = (df_b_fora['Gols_Feitos'].mean() / media_gols_fora) if media_gols_fora else 1
-    # Força Defensiva do Time B (Fora) - Contra gols sofridos pelo time da casa
-    defense_b = (df_b_fora['Gols_Sofridos'].mean() / media_gols_casa) if media_gols_casa else 1
-    
-    # Garantir que não sejam NaN se a média da liga for zero, embora improvável com dados reais
-    if np.isnan(attack_a): attack_a = 1.0
-    if np.isnan(defense_a): defense_a = 1.0
-    if np.isnan(attack_b): attack_b = 1.0
-    if np.isnan(defense_b): defense_b = 1.0
+    attack_b = (media_feita_b / media_gols_fora) if media_gols_fora else 1.0
+    # Força Defensiva do Time B (Fora) - Quanto o adversário sofre fora vs. média da liga casa
+    defense_b = (media_sofrida_b / media_gols_casa) if media_gols_casa else 1.0
         
     # 4. Cálculo dos Lambdas (Gols Esperados)
     
@@ -87,14 +132,15 @@ def calcular_forcas(df, time_casa, time_fora):
     # Lambda Time B (Gols esperados para o Time B) = Força_Ataque_B * Força_Defesa_A * Média_Gols_Fora_Liga
     lambda_b = attack_b * defense_a * media_gols_fora
     
+    # Retorna todos os valores calculados
     return lambda_a, lambda_b, attack_a, defense_a, attack_b, defense_b, media_gols_casa, media_gols_fora
 
 # --- 2. MODELO PREDITIVO (Distribuição de Poisson) ---
 
+@st.cache_data
 def calcular_probabilidade_poisson(lambda_a, lambda_b):
     """
     Usa a Distribuição de Poisson para prever a probabilidade de placares.
-    Agora usa lambdas baseados em Forças Ofensivas/Defensivas.
     """
     max_gols = 5
     prob_matrix = np.zeros((max_gols + 1, max_gols + 1))
@@ -102,7 +148,6 @@ def calcular_probabilidade_poisson(lambda_a, lambda_b):
     for gols_a in range(max_gols + 1):
         for gols_b in range(max_gols + 1):
             # PMF (Probability Mass Function) de Poisson
-            # Usa os lambdas calculados por Força * Fraqueza
             prob_a = poisson.pmf(gols_a, lambda_a)
             prob_b = poisson.pmf(gols_b, lambda_b)
             
@@ -146,18 +191,38 @@ def calcular_mercados(prob_matrix):
 
 # --- 3. EXECUÇÃO E INTERFACE STREAMLIT ---
 
-# Definição dos Times do Jogo
-TIME_CASA = 'Time A'
-TIME_FORA = 'Time B'
-
 st.title("⚽ Betano Analyst AI: Protótipo de Análise Preditiva Avançada")
-st.subheader(f"Análise: {TIME_CASA} (Casa) vs {TIME_FORA} (Fora) - Modelo Poisson com Força Ofensiva/Defensiva")
-st.caption("Este modelo utiliza a Força Ofensiva de cada time contra a Força Defensiva do adversário para calcular os gols esperados (Lambdas), tornando a previsão mais precisa que a média simples.")
+st.subheader("Simulação com 60 Times: Brasileirão, La Liga e Premier League")
+st.caption("Este modelo utiliza o método da Força Ofensiva/Defensiva ajustada para calcular as probabilidades de placar exato, 1X2 e Over/Under.")
 
 # 1. Coleta e processamento dos dados
 df_historico = simular_historico_jogos()
 
-# 2. Calcula Forças e Lambdas
+# 2. Seleção de Times na Interface
+st.markdown("####  Seleção da Partida")
+col_select_casa, col_select_fora = st.columns(2)
+
+with col_select_casa:
+    time_casa_selecionado = st.selectbox(
+        "Time da Casa (Home Team)", 
+        options=TODOS_TIMES, 
+        index=TODOS_TIMES.index('FLA') # Flamengo como default
+    )
+
+with col_select_fora:
+    time_fora_selecionado = st.selectbox(
+        "Time Visitante (Away Team)", 
+        options=[t for t in TODOS_TIMES if t != time_casa_selecionado], 
+        index=[t for t in TODOS_TIMES if t != time_casa_selecionado].index('MCI') # Man City como default
+    )
+
+TIME_CASA = time_casa_selecionado
+TIME_FORA = time_fora_selecionado
+
+st.markdown(f"### ⚔️ Confronto Selecionado: {TIME_CASA} (Casa) vs {TIME_FORA} (Fora)")
+
+
+# 3. Calcula Forças e Lambdas (com cache)
 lambda_a, lambda_b, attack_a, defense_a, attack_b, defense_b, media_liga_c, media_liga_f = calcular_forcas(df_historico, TIME_CASA, TIME_FORA)
 
 
@@ -165,8 +230,8 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
     st.markdown("#### ⚙️ Forças Ofensivas e Defensivas")
-    st.info(f"**{TIME_CASA} (Ataque):** {attack_a:.2f} (Base: {media_liga_c:.2f} Gols)")
-    st.info(f"**{TIME_CASA} (Defesa):** {defense_a:.2f} (Base: {media_liga_f:.2f} Gols)")
+    st.info(f"**{TIME_CASA} (Ataque):** {attack_a:.2f} (Base Média Casa: {media_liga_c:.2f} Gols)")
+    st.info(f"**{TIME_CASA} (Defesa):** {defense_a:.2f} (Base Média Fora: {media_liga_f:.2f} Gols)")
     
 with col2:
     st.markdown("#### 🎯 Gols Esperados (Lambdas - Input Poisson)")
@@ -175,11 +240,11 @@ with col2:
 
 with col3:
     st.markdown("#### ⚙️ Forças Ofensivas e Defensivas")
-    st.info(f"**{TIME_FORA} (Ataque):** {attack_b:.2f} (Base: {media_liga_f:.2f} Gols)")
-    st.info(f"**{TIME_FORA} (Defesa):** {defense_b:.2f} (Base: {media_liga_c:.2f} Gols)")
+    st.info(f"**{TIME_FORA} (Ataque):** {attack_b:.2f} (Base Média Fora: {media_liga_f:.2f} Gols)")
+    st.info(f"**{TIME_FORA} (Defesa):** {defense_b:.2f} (Base Média Casa: {media_liga_c:.2f} Gols)")
 
 
-# 3. Executa o modelo preditivo de Poisson
+# 4. Executa o modelo preditivo de Poisson
 prob_matrix = calcular_probabilidade_poisson(lambda_a, lambda_b)
 
 st.markdown("---")
@@ -192,9 +257,6 @@ df_prob_matrix = pd.DataFrame(prob_matrix * 100,
                               index=[f'{TIME_CASA}: {i}' for i in range(prob_matrix.shape[0])], 
                               columns=[f'{TIME_FORA}: {j}' for j in range(prob_matrix.shape[1])])
 
-# --- CORREÇÃO FINAL: REMOVENDO O PANDAS STYLER PARA ESTABILIDADE MÁXIMA ---
-# Para garantir que o deploy funcione, removemos a estilização complexa.
-# Apenas passamos o DataFrame arredondado.
 df_prob_matrix = df_prob_matrix.round(2)
 
 st.dataframe(
@@ -203,7 +265,7 @@ st.dataframe(
 )
 
 
-# 4. Cálculo dos Mercados de Apostas (Over/Under e 1X2)
+# 5. Cálculo dos Mercados de Apostas (Over/Under e 1X2)
 prob_over_1_5, prob_over_2_5, prob_vitoria_casa, prob_empate, prob_vitoria_fora = calcular_mercados(prob_matrix)
 
 # Cálculo da ODD JUSTA
