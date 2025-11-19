@@ -192,13 +192,15 @@ df_prob_matrix = pd.DataFrame(prob_matrix * 100,
                               index=[f'{TIME_CASA}: {i}' for i in range(prob_matrix.shape[0])], 
                               columns=[f'{TIME_FORA}: {j}' for j in range(prob_matrix.shape[1])])
 
-# APLICANDO A FORMATAÇÃO E ESTILO DIRETAMENTE NO OBJETO STYLER (CORREÇÃO APLICADA AQUI)
-# A correção remove o argumento 'precision' do st.dataframe e aplica a formatação
-# de precisão e gradiente diretamente no objeto Styler.
+# --- CORREÇÃO DE ERRO DE STREAMLIT STYLER APLICADA AQUI ---
+# Aplicamos a formatação de precisão (arredondamento) diretamente no DataFrame
+# para evitar o erro de traceback que ocorre com o .format() do Styler em alguns ambientes.
+df_prob_matrix = df_prob_matrix.round(2)
+
+# Aplicando apenas o estilo de gradiente no Styler.
 styler_matrix = (
     df_prob_matrix.style
     .background_gradient(cmap='plasma', axis=None)
-    .format(precision=2)
 )
 
 # Passando o objeto Styler para o Streamlit
@@ -249,7 +251,7 @@ with col_odd_1:
     odd_betano_casa = st.number_input(
         f"Odd Betano (Vitória {TIME_CASA})", 
         min_value=1.01, 
-        max_value=100.00, # Aumentei o max_value
+        max_value=100.00, 
         value=1.90, # Valor de exemplo
         step=0.01, 
         format="%.2f",
