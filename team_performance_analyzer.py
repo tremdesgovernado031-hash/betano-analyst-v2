@@ -192,20 +192,13 @@ df_prob_matrix = pd.DataFrame(prob_matrix * 100,
                               index=[f'{TIME_CASA}: {i}' for i in range(prob_matrix.shape[0])], 
                               columns=[f'{TIME_FORA}: {j}' for j in range(prob_matrix.shape[1])])
 
-# --- CORREÇÃO DE ERRO DE STREAMLIT STYLER APLICADA AQUI ---
-# Aplicamos a formatação de precisão (arredondamento) diretamente no DataFrame
-# para evitar o erro de traceback que ocorre com o .format() do Styler em alguns ambientes.
+# --- CORREÇÃO FINAL: REMOVENDO O PANDAS STYLER PARA ESTABILIDADE MÁXIMA ---
+# Para garantir que o deploy funcione, removemos a estilização complexa.
+# Apenas passamos o DataFrame arredondado.
 df_prob_matrix = df_prob_matrix.round(2)
 
-# Aplicando apenas o estilo de gradiente no Styler.
-styler_matrix = (
-    df_prob_matrix.style
-    .background_gradient(cmap='plasma', axis=None)
-)
-
-# Passando o objeto Styler para o Streamlit
 st.dataframe(
-    styler_matrix,
+    df_prob_matrix,
     use_container_width=True,
 )
 
