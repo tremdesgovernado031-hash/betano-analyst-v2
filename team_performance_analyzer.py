@@ -3,9 +3,38 @@ import numpy as np
 import streamlit as st
 from scipy.stats import poisson
 import random
+import time
 
 # Configuração da Página Streamlit (A Interface do Aplicativo)
 st.set_page_config(layout="wide", page_title="Betano Analyst AI Prototype - Força Ofensiva")
+
+# --- FUNÇÃO DE MOCK ODDS (SIMULAÇÃO DA BUSCA POR ODDS DA BETANO) ---
+
+# Nota: Não é possível extrair odds em tempo real de casas de apostas devido a limitações de ambiente
+# e termos de serviço. Esta função simula odds plausíveis com base na probabilidade do modelo.
+def simular_fetch_odds(prob, time_nome, mercado_tipo, margin_percent=0.06):
+    """
+    Simula a busca por odds no mercado. As odds são baseadas na probabilidade calculada 
+    pela IA (Fair Odd) ajustadas por uma margem de lucro da casa de apostas (ex: 6%).
+    """
+    
+    # 1. Calculamos a Odd Justa (Fair Odd)
+    fair_odd = 1 / prob if prob > 0 else 100
+    
+    # 2. Adicionamos a margem da casa de apostas (simulação do "Vigorish")
+    # Odd com margem = Fair Odd * (1 + Margem)
+    bookie_odd = fair_odd * (1 + margin_percent)
+    
+    # 3. Adicionamos um pequeno ruído aleatório para simular a variação de mercado
+    # O ruído é baseado em 5% da margem
+    noise_factor = 1 + (random.uniform(-1, 1) * 0.05 * margin_percent)
+    final_odd = bookie_odd * noise_factor
+    
+    # Se a odd for muito baixa, garantimos um mínimo
+    final_odd = max(1.01, final_odd)
+
+    return round(final_odd, 2)
+
 
 # --- 0. DEFINIÇÃO DE TIMES (Nome Completo e Abreviação para a Simulação) ---
 
@@ -190,6 +219,14 @@ def calcular_mercados(prob_matrix):
     # Retorna todas as probabilidades (Over/Under e 1X2)
     return prob_over_1_5, prob_over_2_5, prob_vitoria_casa, prob_empate, prob_vitoria_fora
 
+# Cálculo da ODD JUSTA (mantida como função auxiliar)
+def calcular_odd_justa(probabilidade):
+    """Calcula a cotação justa (fair odd) como o inverso da probabilidade."""
+    if probabilidade > 0:
+        return 1 / probabilidade
+    return float('inf')
+
+
 # --- 3. EXECUÇÃO E INTERFACE STREAMLIT ---
 
 st.title("⚽ Betano Analyst AI: Protótipo de Análise Preditiva Avançada")
@@ -203,31 +240,34 @@ df_historico = simular_historico_jogos()
 st.markdown("####  Seleção da Partida")
 col_select_casa, col_select_fora = st.columns(2)
 
-# Usamos os nomes completos nas opções de seleção
+# Mapeamento para exibição
 TIMES_NOMES = list(TIMES.values())
 TIMES_ABREV = list(TIMES.keys())
 
 # Define o índice inicial para Times Casa e Fora
-default_casa_index = TIMES_NOMES.index(TIMES['FLA']) # Flamengo
-default_fora_index = TIMES_NOMES.index(TIMES['MCI']) # Manchester City
+default_fla_index = TIMES_NOMES.index(TIMES['FLA'])
+default_mci_index = TIMES_NOMES.index(TIMES['MCI'])
 
 with col_select_casa:
     nome_casa_selecionado = st.selectbox(
         "Time da Casa (Home Team)", 
         options=TIMES_NOMES, 
-        index=default_casa_index
+        index=default_fla_index
     )
 
 with col_select_fora:
     # Filtra os times visitantes para não incluir o time da casa selecionado
     opcoes_fora = [nome for nome in TIMES_NOMES if nome != nome_casa_selecionado]
     
-    # Ajusta o índice padrão se o MCI foi o selecionado em casa
+    # Ajusta o índice padrão
     if nome_casa_selecionado == TIMES['MCI']:
         default_fora_index = opcoes_fora.index(TIMES['RMA'])
     else:
-        default_fora_index = opcoes_fora.index(TIMES['MCI'])
-
+        # Se 'Manchester City' estiver nas opções, usa seu índice, se não, usa o primeiro
+        try:
+            default_fora_index = opcoes_fora.index(TIMES['MCI'])
+        except ValueError:
+            default_fora_index = 0
 
     nome_fora_selecionado = st.selectbox(
         "Time Visitante (Away Team)", 
@@ -292,96 +332,60 @@ st.dataframe(
 # 6. Cálculo dos Mercados de Apostas (Over/Under e 1X2)
 prob_over_1_5, prob_over_2_5, prob_vitoria_casa, prob_empate, prob_vitoria_fora = calcular_mercados(prob_matrix)
 
-# Cálculo da ODD JUSTA
-def calcular_odd_justa(probabilidade):
-    """Calcula a cotação justa (fair odd) como o inverso da probabilidade."""
-    if probabilidade > 0:
-        return 1 / probabilidade
-    return float('inf')
-
-
+# 7. Geração e Análise de Odds AUTOMÁTICA
 st.markdown("---")
-st.markdown("#### 💰 Sugestões para Bilhetes do Dia (Análise de Valor)")
+st.markdown("#### 💰 Sugestões para Bilhetes do Dia (Análise de Valor Automatizada)")
 
 st.markdown("##### ➡️ Análise: Vencedor da Partida (1X2)")
 
 # --- Linha de Métricas (Prob. e Odd Justa) ---
 col_prob_1, col_prob_X, col_prob_2 = st.columns(3)
 
+# 1. Vitório Casa (1)
+odd_justa_casa = calcular_odd_justa(prob_vitoria_casa)
+odd_betano_casa = simular_fetch_odds(prob_vitoria_casa, TIME_CASA_EXIBICAO, '1X2')
+prob_implicita_casa = 1 / odd_betano_casa 
+value_bet_casa = (prob_vitoria_casa - prob_implicita_casa) * 100 
+
 with col_prob_1:
     st.metric(label=f"Prob. IA: Vitória {TIME_CASA_EXIBICAO} (1)", value=f"{prob_vitoria_casa * 100:.2f}%")
-    st.caption(f"Odd Justa: **{calcular_odd_justa(prob_vitoria_casa):.2f}**")
-    
-with col_prob_X:
-    st.metric(label="Prob. IA: Empate (X)", value=f"{prob_empate * 100:.2f}%")
-    st.caption(f"Odd Justa: **{calcular_odd_justa(prob_empate):.2f}**")
-    
-with col_prob_2:
-    st.metric(label=f"Prob. IA: Vitória {TIME_FORA_EXIBICAO} (2)", value=f"{prob_vitoria_fora * 100:.2f}%")
-    st.caption(f"Odd Justa: **{calcular_odd_justa(prob_vitoria_fora):.2f}**")
-
-# --- Análise de Value Bet (Input da Odd da Betano) ---
-st.markdown("##### Odd da Betano e Value Bet (Insira as Odds Atuais)")
-
-col_odd_1, col_odd_X, col_odd_2 = st.columns(3)
-
-# Análise Vitória Casa (1)
-with col_odd_1:
-    odd_betano_casa = st.number_input(
-        f"Odd Betano (Vitória {TIME_CASA_EXIBICAO})", 
-        min_value=1.01, 
-        max_value=100.00, 
-        value=1.90, # Valor de exemplo
-        step=0.01, 
-        format="%.2f",
-        key='odd_input_1'
-    )
-    prob_implicita_casa = 1 / odd_betano_casa 
-    value_bet_casa = (prob_vitoria_casa - prob_implicita_casa) * 100 
-    
+    st.caption(f"Odd Justa: **{odd_justa_casa:.2f}**")
+    st.markdown(f"**Odd SIMULADA Betano:** **{odd_betano_casa:.2f}**")
     st.markdown("**Análise de Valor**")
-    if odd_betano_casa > calcular_odd_justa(prob_vitoria_casa) and value_bet_casa > 1.0:
-        st.success(f"VALUE BET IDENTIFICADO! (+{value_bet_casa:.2f}%)")
+    if odd_betano_casa > odd_justa_casa and value_bet_casa > 1.0:
+        st.success(f"**VALUE BET!** (+{value_bet_casa:.2f}%)")
     else:
         st.warning(f"Odd não compensa o risco. (Valor: {value_bet_casa:.2f}%)")
         
-# Análise Empate (X)
-with col_odd_X:
-    odd_betano_empate = st.number_input(
-        "Odd Betano (Empate)", 
-        min_value=1.01, 
-        max_value=100.00, 
-        value=3.50, # Valor de exemplo
-        step=0.01, 
-        format="%.2f",
-        key='odd_input_X'
-    )
-    prob_implicita_empate = 1 / odd_betano_empate 
-    value_bet_empate = (prob_empate - prob_implicita_empate) * 100 
-    
+# 2. Empate (X)
+odd_justa_empate = calcular_odd_justa(prob_empate)
+odd_betano_empate = simular_fetch_odds(prob_empate, 'Empate', '1X2')
+prob_implicita_empate = 1 / odd_betano_empate 
+value_bet_empate = (prob_empate - prob_implicita_empate) * 100 
+
+with col_prob_X:
+    st.metric(label="Prob. IA: Empate (X)", value=f"{prob_empate * 100:.2f}%")
+    st.caption(f"Odd Justa: **{odd_justa_empate:.2f}**")
+    st.markdown(f"**Odd SIMULADA Betano:** **{odd_betano_empate:.2f}**")
     st.markdown("**Análise de Valor**")
-    if odd_betano_empate > calcular_odd_justa(prob_empate) and value_bet_empate > 1.0:
-        st.success(f"VALUE BET IDENTIFICADO! (+{value_bet_empate:.2f}%)")
+    if odd_betano_empate > odd_justa_empate and value_bet_empate > 1.0:
+        st.success(f"**VALUE BET!** (+{value_bet_empate:.2f}%)")
     else:
         st.warning(f"Odd não compensa o risco. (Valor: {value_bet_empate:.2f}%)")
 
-# Análise Vitória Fora (2)
-with col_odd_2:
-    odd_betano_fora = st.number_input(
-        f"Odd Betano (Vitória {TIME_FORA_EXIBICAO})", 
-        min_value=1.01, 
-        max_value=100.00, 
-        value=4.00, # Valor de exemplo
-        step=0.01, 
-        format="%.2f",
-        key='odd_input_2'
-    )
-    prob_implicita_fora = 1 / odd_betano_fora 
-    value_bet_fora = (prob_vitoria_fora - prob_implicita_fora) * 100 
-    
+# 3. Vitória Fora (2)
+odd_justa_fora = calcular_odd_justa(prob_vitoria_fora)
+odd_betano_fora = simular_fetch_odds(prob_vitoria_fora, TIME_FORA_EXIBICAO, '1X2')
+prob_implicita_fora = 1 / odd_betano_fora 
+value_bet_fora = (prob_vitoria_fora - prob_implicita_fora) * 100 
+
+with col_prob_2:
+    st.metric(label=f"Prob. IA: Vitória {TIME_FORA_EXIBICAO} (2)", value=f"{prob_vitoria_fora * 100:.2f}%")
+    st.caption(f"Odd Justa: **{odd_justa_fora:.2f}**")
+    st.markdown(f"**Odd SIMULADA Betano:** **{odd_betano_fora:.2f}**")
     st.markdown("**Análise de Valor**")
-    if odd_betano_fora > calcular_odd_justa(prob_vitoria_fora) and value_bet_fora > 1.0:
-        st.success(f"VALUE BET IDENTIFICADO! (+{value_bet_fora:.2f}%)")
+    if odd_betano_fora > odd_justa_fora and value_bet_fora > 1.0:
+        st.success(f"**VALUE BET!** (+{value_bet_fora:.2f}%)")
     else:
         st.warning(f"Odd não compensa o risco. (Valor: {value_bet_fora:.2f}%)")
 
@@ -390,7 +394,10 @@ st.markdown("---")
 st.markdown("##### ➡️ Análise: Mais/Menos Gols (Over/Under)")
 
 odd_justa_over_2_5 = calcular_odd_justa(prob_over_2_5)
+odd_betano_over_2_5 = simular_fetch_odds(prob_over_2_5, 'Over 2.5', 'Over/Under', margin_percent=0.04) # Margem menor para Over/Under
 
+prob_implicita_over = 1 / odd_betano_over_2_5 
+value_bet_over = (prob_over_2_5 - prob_implicita_over) * 100 
 
 col_over_1, col_over_2, col_over_3, col_over_4 = st.columns(4)
 
@@ -404,24 +411,12 @@ with col_over_3:
     st.metric(label="Odd Justa da IA (Over 2.5)", value=f"{odd_justa_over_2_5:.2f}")
 
 with col_over_4:
-    # Este é o campo onde você insere a Odd da Betano no dia
-    odd_betano_over_2_5 = st.number_input(
-        "Odd da Betano (Over 2.5)", 
-        min_value=1.01, 
-        max_value=100.00, 
-        value=2.10, 
-        step=0.01, 
-        format="%.2f",
-        key='odd_input_over'
-    ) 
-    
-    prob_implicita = 1 / odd_betano_over_2_5 
-    value_bet = (prob_over_2_5 - prob_implicita) * 100 
+    st.metric(label="Odd SIMULADA Betano (Over 2.5)", value=f"{odd_betano_over_2_5:.2f}")
     
     st.markdown("**Análise de Valor (VALUE)**")
     
-    if odd_betano_over_2_5 > odd_justa_over_2_5 and value_bet > 1.0:
-        st.success(f"VALUE BET IDENTIFICADO! (+{value_bet:.2f}%)")
-        st.markdown(f"**Sugestão:** Apostar no Over 2.5 Gols (Odd {odd_betano_over_2_5})")
+    if odd_betano_over_2_5 > odd_justa_over_2_5 and value_bet_over > 1.0:
+        st.success(f"**VALUE BET!** (+{value_bet_over:.2f}%)")
+        st.markdown(f"**Sugestão:** Apostar no Over 2.5 Gols")
     else:
-        st.warning(f"Odd da Betano não compensa o risco calculado pela IA. (Valor: {value_bet:.2f}%)")
+        st.warning(f"Odd não compensa o risco calculado pela IA. (Valor: {value_bet_over:.2f}%)")
