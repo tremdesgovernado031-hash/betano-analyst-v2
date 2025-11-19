@@ -197,11 +197,12 @@ df_prob_matrix = pd.DataFrame(prob_matrix * 100,
                               index=[f'{TIME_CASA}: {i}' for i in range(prob_matrix.shape[0])], 
                               columns=[f'{TIME_FORA}: {j}' for j in range(prob_matrix.shape[1])])
 
-# Aplica um gradiente de cor para destacar as maiores probabilidades
+# Aplica o estilo e a formatação separadamente, depois passa o objeto Styler para o Streamlit
+styler_matrix = df_prob_matrix.style.background_gradient(cmap='plasma', axis=None).format(precision=2)
+
 st.dataframe(
-    df_prob_matrix.style.background_gradient(cmap='plasma', axis=None, subset=pd.IndexSlice[0:5, 0:5]),
+    styler_matrix,
     use_container_width=True,
-    precision=2
 )
 
 
@@ -221,49 +222,85 @@ st.markdown("#### 💰 Sugestões para Bilhetes do Dia (Análise de Valor)")
 
 st.markdown("##### ➡️ Análise: Vencedor da Partida (1X2)")
 
-col_1x2_1, col_1x2_2, col_1x2_3, col_1x2_4 = st.columns(4)
+# --- Linha de Métricas (Prob. e Odd Justa) ---
+col_prob_1, col_prob_X, col_prob_2 = st.columns(3)
 
-# ODD JUSTA para 1 (Vitória Casa)
-odd_justa_casa = calcular_odd_justa(prob_vitoria_casa)
-
-with col_1x2_1:
-    st.metric(label=f"Prob. da IA: Vitória {TIME_CASA} (1)", value=f"{prob_vitoria_casa * 100:.2f}%")
+with col_prob_1:
+    st.metric(label=f"Prob. IA: Vitória {TIME_CASA} (1)", value=f"{prob_vitoria_casa * 100:.2f}%")
+    st.caption(f"Odd Justa: **{calcular_odd_justa(prob_vitoria_casa):.2f}**")
     
-with col_1x2_2:
-    st.metric(label="Prob. da IA: Empate (X)", value=f"{prob_empate * 100:.2f}%")
+with col_prob_X:
+    st.metric(label="Prob. IA: Empate (X)", value=f"{prob_empate * 100:.2f}%")
+    st.caption(f"Odd Justa: **{calcular_odd_justa(prob_empate):.2f}**")
     
-with col_1x2_3:
-    st.metric(label=f"Prob. da IA: Vitória {TIME_FORA} (2)", value=f"{prob_vitoria_fora * 100:.2f}%")
+with col_prob_2:
+    st.metric(label=f"Prob. IA: Vitória {TIME_FORA} (2)", value=f"{prob_vitoria_fora * 100:.2f}%")
+    st.caption(f"Odd Justa: **{calcular_odd_justa(prob_vitoria_fora):.2f}**")
 
-with col_1x2_4:
-    st.metric(label="Odd Justa da IA (Vitória Casa)", value=f"{odd_justa_casa:.2f}")
+# --- Análise de Value Bet (Input da Odd da Betano) ---
+st.markdown("##### Odd da Betano e Value Bet (Insira as Odds Atuais)")
 
+col_odd_1, col_odd_X, col_odd_2 = st.columns(3)
 
-st.markdown("##### Odd da Betano e Value Bet (Vitória Casa)")
-col_odd_1, col_odd_2 = st.columns(2)
-
+# Análise Vitória Casa (1)
 with col_odd_1:
     odd_betano_casa = st.number_input(
-        f"Odd da Betano (Vitória {TIME_CASA})", 
+        f"Odd Betano (Vitória {TIME_CASA})", 
         min_value=1.01, 
-        max_value=10.00, 
+        max_value=100.00, # Aumentei o max_value
         value=1.90, # Valor de exemplo
         step=0.01, 
         format="%.2f",
-        key='odd_input_1x2'
+        key='odd_input_1'
     )
-
-with col_odd_2:
     prob_implicita_casa = 1 / odd_betano_casa 
     value_bet_casa = (prob_vitoria_casa - prob_implicita_casa) * 100 
     
-    st.markdown("**Análise de Valor (VALUE)**")
-    
-    if odd_betano_casa > odd_justa_casa and value_bet_casa > 1.0:
+    st.markdown("**Análise de Valor**")
+    if odd_betano_casa > calcular_odd_justa(prob_vitoria_casa) and value_bet_casa > 1.0:
         st.success(f"VALUE BET IDENTIFICADO! (+{value_bet_casa:.2f}%)")
-        st.markdown(f"**Sugestão:** Apostar na Vitória do {TIME_CASA} (Odd {odd_betano_casa})")
     else:
-        st.warning(f"Odd da Betano não compensa o risco calculado pela IA. (Valor: {value_bet_casa:.2f}%)")
+        st.warning(f"Odd não compensa o risco. (Valor: {value_bet_casa:.2f}%)")
+        
+# Análise Empate (X)
+with col_odd_X:
+    odd_betano_empate = st.number_input(
+        "Odd Betano (Empate)", 
+        min_value=1.01, 
+        max_value=100.00, 
+        value=3.50, # Valor de exemplo
+        step=0.01, 
+        format="%.2f",
+        key='odd_input_X'
+    )
+    prob_implicita_empate = 1 / odd_betano_empate 
+    value_bet_empate = (prob_empate - prob_implicita_empate) * 100 
+    
+    st.markdown("**Análise de Valor**")
+    if odd_betano_empate > calcular_odd_justa(prob_empate) and value_bet_empate > 1.0:
+        st.success(f"VALUE BET IDENTIFICADO! (+{value_bet_empate:.2f}%)")
+    else:
+        st.warning(f"Odd não compensa o risco. (Valor: {value_bet_empate:.2f}%)")
+
+# Análise Vitória Fora (2)
+with col_odd_2:
+    odd_betano_fora = st.number_input(
+        f"Odd Betano (Vitória {TIME_FORA})", 
+        min_value=1.01, 
+        max_value=100.00, 
+        value=4.00, # Valor de exemplo
+        step=0.01, 
+        format="%.2f",
+        key='odd_input_2'
+    )
+    prob_implicita_fora = 1 / odd_betano_fora 
+    value_bet_fora = (prob_vitoria_fora - prob_implicita_fora) * 100 
+    
+    st.markdown("**Análise de Valor**")
+    if odd_betano_fora > calcular_odd_justa(prob_vitoria_fora) and value_bet_fora > 1.0:
+        st.success(f"VALUE BET IDENTIFICADO! (+{value_bet_fora:.2f}%)")
+    else:
+        st.warning(f"Odd não compensa o risco. (Valor: {value_bet_fora:.2f}%)")
 
 
 st.markdown("---")
@@ -288,7 +325,7 @@ with col_over_4:
     odd_betano_over_2_5 = st.number_input(
         "Odd da Betano (Over 2.5)", 
         min_value=1.01, 
-        max_value=10.00, 
+        max_value=100.00, 
         value=2.10, 
         step=0.01, 
         format="%.2f",
