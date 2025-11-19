@@ -298,6 +298,43 @@ odd_betano_casa, odd_betano_empate, odd_betano_fora = calcular_e_ajustar_odds_1x
     prob_vitoria_casa, prob_empate, prob_vitoria_fora, VIGORISH_1X2
 )
 
+# --- Exibição das Métricas Chave (Forças, Lambdas) ---
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.markdown("#### ⚙️ Forças Ofensivas e Defensivas")
+    st.info(f"**{TIME_CASA_EXIBICAO} (Ataque):** {attack_a:.2f}")
+    st.info(f"**{TIME_CASA_EXIBICAO} (Defesa):** {defense_a:.2f}")
+    
+with col2:
+    st.markdown("#### 🎯 Gols Esperados (Lambdas - Input Poisson)")
+    st.success(f"**{TIME_CASA_EXIBICAO} - Lambda:** {lambda_a:.2f} Gols")
+    st.success(f"**{TIME_FORA_EXIBICAO} - Lambda:** {lambda_b:.2f} Gols")
+
+with col3:
+    st.markdown("#### ⚙️ Forças Ofensivas e Defensivas")
+    st.info(f"**{TIME_FORA_EXIBICAO} (Ataque):** {attack_b:.2f}")
+    st.info(f"**{TIME_FORA_EXIBICAO} (Defesa):** {defense_b:.2f}")
+
+# --- NOVO BLOCO: PROBABILIDADES DE VITÓRIA (1X2) ---
+st.markdown("---")
+st.markdown("#### 📈 Probabilidades de Resultado (Mercado 1X2)")
+
+col_prob_1, col_prob_X, col_prob_2 = st.columns(3)
+
+with col_prob_1:
+    st.metric(label=f"Vitória {TIME_CASA_EXIBICAO} (1)", 
+              value=f"{prob_vitoria_casa * 100:.2f}%")
+
+with col_prob_X:
+    st.metric(label="Empate (X)", 
+              value=f"{prob_empate * 100:.2f}%")
+
+with col_prob_2:
+    st.metric(label=f"Vitória {TIME_FORA_EXIBICAO} (2)", 
+              value=f"{prob_vitoria_fora * 100:.2f}%")
+# ----------------------------------------------------
+
 # --- 6. ANÁLISE DE VALUE BET ---
 st.markdown("---")
 st.markdown("#### 💰 Sugestões de Value Bet e Gestão de Banca")
