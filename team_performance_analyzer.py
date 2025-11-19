@@ -12,6 +12,7 @@ st.set_page_config(layout="wide", page_title="Betano Analyst AI Prototype - Aná
 # Definimos o Vigorish (Margem de Lucro da Casa de Apostas) para simulação.
 VIGORISH_1X2 = 0.05  # 5% de margem no mercado 1X2
 VIGORISH_OU = 0.04   # 4% de margem no mercado Over/Under
+VIGORISH_BTTS_DC = 0.04 # 4% de margem para BTTS e Dupla Chance
 # ---
 
 
@@ -52,10 +53,11 @@ def calcular_odd_justa(probabilidade):
 
 def simular_fetch_odds(prob, mercado_tipo, vigorish_percent):
     """
-    Simula a busca por odds no mercado (usado apenas para Over/Under e Placar Exato).
+    Simula a busca por odds no mercado (usado para Over/Under, BTTS, etc.).
     """
     fair_odd = calcular_odd_justa(prob)
-    vigorish_factor = 1 / (1 + vigorish_percent)
+    # Fator de Vigorish, que simula a margem da casa de apostas
+    vigorish_factor = 1 / (1 + vigorish_percent) 
     bookie_odd = fair_odd * vigorish_factor
     
     # Adicionamos um ruído aleatório muito pequeno (max 0.5% de variação)
@@ -69,8 +71,7 @@ def simular_fetch_odds(prob, mercado_tipo, vigorish_percent):
 
 def calcular_e_ajustar_odds_1x2(prob_vitoria_casa, prob_empate, prob_vitoria_fora, vigorish):
     """
-    Calcula as Odds 1X2 ajustando-as pelo True Vigorish, garantindo que a soma 
-    das probabilidades implícitas seja exatamente (1 + Vigorish).
+    Calcula as Odds 1X2 ajustando-as pelo True Vigorish.
     """
     probs = [prob_vitoria_casa, prob_empate, prob_vitoria_fora]
     
@@ -193,7 +194,8 @@ def calcular_forcas(df, time_casa, time_fora):
 @st.cache_data
 def calcular_probabilidade_poisson(lambda_a, lambda_b):
     """Usa a Distribuição de Poisson para prever a probabilidade de placares."""
-    max_gols = 5
+    # Aumentando o max_gols para calcular Over/Under 4.5
+    max_gols = 6 
     prob_matrix = np.zeros((max_gols + 1, max_gols + 1))
 
     for gols_a in range(max_gols + 1):
@@ -205,27 +207,57 @@ def calcular_probabilidade_poisson(lambda_a, lambda_b):
     return prob_matrix
 
 def calcular_mercados(prob_matrix):
-    """Calcula as probabilidades dos mercados Mais/Menos Gols (Over/Under) e 1X2."""
+    """Calcula as probabilidades dos principais mercados usando a matriz Poisson."""
     
     prob_total = prob_matrix.sum() 
+    
+    # ------------------ 1X2 E DUPLA CHANCE (DC) ------------------
     prob_vitoria_casa = 0
     prob_empate = 0
     prob_vitoria_fora = 0
-    prob_under_2_5_calc = 0
     
+    # ------------------ AMBAS MARCAM (BTTS) ------------------
+    prob_btts_sim = 0
+    
+    # ------------------ OVER/UNDER ------------------
+    prob_under_1_5 = 0
+    prob_under_2_5 = 0
+    prob_under_3_5 = 0
+    prob_under_4_5 = 0
+    
+    # Itera sobre a matriz de placares
     for i in range(prob_matrix.shape[0]):
         for j in range(prob_matrix.shape[1]):
-            # 1X2 
-            if i > j: prob_vitoria_casa += prob_matrix[i, j]
-            elif i == j: prob_empate += prob_matrix[i, j]
-            else: prob_vitoria_fora += prob_matrix[i, j]
+            prob = prob_matrix[i, j]
+            soma_gols = i + j
             
-            # Under 2.5
-            if i + j <= 2: prob_under_2_5_calc += prob_matrix[i, j]
+            # 1X2 
+            if i > j: prob_vitoria_casa += prob
+            elif i == j: prob_empate += prob
+            else: prob_vitoria_fora += prob
+            
+            # BTTS SIM (i > 0 E j > 0)
+            if i > 0 and j > 0: prob_btts_sim += prob
                 
-    prob_over_2_5 = prob_total - prob_under_2_5_calc
-    prob_under_1_5 = prob_matrix[0, 0] + prob_matrix[0, 1] + prob_matrix[1, 0]
+            # UNDER
+            if soma_gols <= 1: prob_under_1_5 += prob
+            if soma_gols <= 2: prob_under_2_5 += prob
+            if soma_gols <= 3: prob_under_3_5 += prob
+            if soma_gols <= 4: prob_under_4_5 += prob
+                
+    # Calcula os OVERs
     prob_over_1_5 = prob_total - prob_under_1_5
+    prob_over_2_5 = prob_total - prob_under_2_5
+    prob_over_3_5 = prob_total - prob_under_3_5
+    prob_over_4_5 = prob_total - prob_under_4_5
+    
+    # BTTS Não
+    prob_btts_nao = prob_total - prob_btts_sim
+
+    # Dupla Chance
+    prob_dc_1x = prob_vitoria_casa + prob_empate
+    prob_dc_x2 = prob_vitoria_fora + prob_empate
+    prob_dc_12 = prob_vitoria_casa + prob_vitoria_fora
     
     # Normaliza as probabilidades 1X2 para somarem 1
     total_1x2 = prob_vitoria_casa + prob_empate + prob_vitoria_fora
@@ -234,7 +266,18 @@ def calcular_mercados(prob_matrix):
         prob_empate /= total_1x2
         prob_vitoria_fora /= total_1x2
 
-    return prob_over_1_5, prob_over_2_5, prob_vitoria_casa, prob_empate, prob_vitoria_fora
+    return {
+        '1': prob_vitoria_casa, 'X': prob_empate, '2': prob_vitoria_fora,
+        'DC_1X': prob_dc_1x, 'DC_X2': prob_dc_x2, 'DC_12': prob_dc_12,
+        'OU_O1.5': prob_over_1_5, 'OU_U1.5': prob_under_1_5,
+        'OU_O2.5': prob_over_2_5, 'OU_U2.5': prob_under_2_5,
+        'OU_O3.5': prob_over_3_5, 'OU_U3.5': prob_under_3_5,
+        'OU_O4.5': prob_over_4.5, 'OU_U4.5': prob_under_4_5,
+        'BTTS_Sim': prob_btts_sim, 'BTTS_Nao': prob_btts_nao,
+        # Handicap Asiático (AH 0.0 é a mesma coisa que DNB - Draw No Bet: 1X2 sem empate)
+        'AH0.0_1': prob_vitoria_casa / prob_dc_12, # Re-normaliza a probabilidade para 12
+        'AH0.0_2': prob_vitoria_fora / prob_dc_12,
+    }
 
 # --- 3. EXECUÇÃO E INTERFACE STREAMLIT ---
 
@@ -291,11 +334,11 @@ lambda_a, lambda_b, attack_a, defense_a, attack_b, defense_b, media_liga_c, medi
 
 # 5. Executa o modelo preditivo de Poisson e calcula mercados
 prob_matrix = calcular_probabilidade_poisson(lambda_a, lambda_b)
-prob_over_1_5, prob_over_2_5, prob_vitoria_casa, prob_empate, prob_vitoria_fora = calcular_mercados(prob_matrix)
+probabilidades = calcular_mercados(prob_matrix)
 
 # Geração das Odds 1X2 ajustadas pelo True Vigorish
 odd_betano_casa, odd_betano_empate, odd_betano_fora = calcular_e_ajustar_odds_1x2(
-    prob_vitoria_casa, prob_empate, prob_vitoria_fora, VIGORISH_1X2
+    probabilidades['1'], probabilidades['X'], probabilidades['2'], VIGORISH_1X2
 )
 
 # --- Exibição das Métricas Chave (Forças, Lambdas) ---
@@ -324,21 +367,18 @@ col_prob_1, col_prob_X, col_prob_2 = st.columns(3)
 
 with col_prob_1:
     st.metric(label=f"Vitória {TIME_CASA_EXIBICAO} (1)", 
-              value=f"{prob_vitoria_casa * 100:.2f}%")
+              value=f"{probabilidades['1'] * 100:.2f}%")
 
 with col_prob_X:
     st.metric(label="Empate (X)", 
-              value=f"{prob_empate * 100:.2f}%")
+              value=f"{probabilidades['X'] * 100:.2f}%")
 
 with col_prob_2:
     st.metric(label=f"Vitória {TIME_FORA_EXIBICAO} (2)", 
-              value=f"{prob_vitoria_fora * 100:.2f}%")
+              value=f"{probabilidades['2'] * 100:.2f}%")
 # ----------------------------------------------------
 
-# --- 6. ANÁLISE DE VALUE BET ---
-st.markdown("---")
-st.markdown("#### 💰 Sugestões de Value Bet e Gestão de Banca")
-
+# --- 6. FUNÇÃO DE ANÁLISE DE VALUE BET GERAL ---
 def exibir_analise_value(label, prob_modelo, odd_betano, bankroll, is_1x2=True):
     """Função auxiliar para exibir a análise de forma padronizada."""
     
@@ -360,108 +400,150 @@ def exibir_analise_value(label, prob_modelo, odd_betano, bankroll, is_1x2=True):
         st.success(f"Aposta Sugerida (Kelly): **R$ {aposta_sugerida:.2f}**")
         st.caption(f"Fração da Banca: {(aposta_sugerida / bankroll_total) * 100:.2f}% (Máximo 5.00%)")
     else:
-        if is_1x2:
-             st.info(f"Probabilidade Implícita (Odd) é maior que a calculada pela IA.")
-        else:
+        # Só exibe se a probabilidade da IA é relevante, para evitar poluição visual de valores baixos
+        if prob_modelo * 100 > 5: 
              st.warning(f"Odd não compensa o risco. (Valor: {value_bet:.2f}%)")
+        else:
+             st.caption("Aposta de baixa probabilidade. (Sem Value Bet)")
 
+st.markdown("---")
+st.markdown("#### 💰 Sugestões de Value Bet e Gestão de Banca")
 
-st.markdown("##### ➡️ Análise: Vencedor da Partida (1X2)")
-col_prob_1, col_prob_X, col_prob_2 = st.columns(3)
+# ====================================================================================
+# A. ANÁLISE: VENCEDOR DA PARTIDA (1X2)
+# ====================================================================================
+st.markdown("##### 1. Mercado: Vencedor da Partida (1X2)")
+col_1, col_X, col_2 = st.columns(3)
 
-with col_prob_1:
+with col_1:
     exibir_analise_value(
         label=f"Vitória {TIME_CASA_EXIBICAO} (1)",
-        prob_modelo=prob_vitoria_casa,
+        prob_modelo=probabilidades['1'],
         odd_betano=odd_betano_casa,
         bankroll=bankroll_total
     )
 
-with col_prob_X:
+with col_X:
     exibir_analise_value(
         label="Empate (X)",
-        prob_modelo=prob_empate,
+        prob_modelo=probabilidades['X'],
         odd_betano=odd_betano_empate,
         bankroll=bankroll_total
     )
 
-with col_prob_2:
+with col_2:
     exibir_analise_value(
         label=f"Vitória {TIME_FORA_EXIBICAO} (2)",
-        prob_modelo=prob_vitoria_fora,
+        prob_modelo=probabilidades['2'],
         odd_betano=odd_betano_fora,
         bankroll=bankroll_total
     )
 
-
+# ====================================================================================
+# B. ANÁLISE: DUPLA CHANCE (DC)
+# ====================================================================================
 st.markdown("---")
-st.markdown("##### ➡️ Análise: Mais/Menos Gols (Over/Under)")
+st.markdown("##### 2. Mercado: Dupla Chance")
+col_dc1, col_dc2, col_dc3 = st.columns(3)
 
-# Geração de Odd Over 2.5
-odd_justa_over_2_5 = calcular_odd_justa(prob_over_2_5)
-odd_betano_over_2_5 = round(simular_fetch_odds(prob_over_2_5, 'Over/Under', VIGORISH_OU), 2)
+# DC 1X
+odd_betano_dc1x = round(simular_fetch_odds(probabilidades['DC_1X'], 'DC', VIGORISH_BTTS_DC), 2)
+with col_dc1:
+    exibir_analise_value(
+        label=f"{TIME_CASA_EXIBICAO} ou Empate (1X)",
+        prob_modelo=probabilidades['DC_1X'],
+        odd_betano=odd_betano_dc1x,
+        bankroll=bankroll_total
+    )
 
-col_over_1, col_over_2 = st.columns(2)
+# DC X2
+odd_betano_dcx2 = round(simular_fetch_odds(probabilidades['DC_X2'], 'DC', VIGORISH_BTTS_DC), 2)
+with col_dc2:
+    exibir_analise_value(
+        label=f"Empate ou {TIME_FORA_EXIBICAO} (X2)",
+        prob_modelo=probabilidades['DC_X2'],
+        odd_betano=odd_betano_dcx2,
+        bankroll=bankroll_total
+    )
 
-with col_over_1:
-    st.metric(label="Prob. da IA: Mais de 2.5 Gols", value=f"{prob_over_2_5 * 100:.2f}%")
+# DC 12
+odd_betano_dc12 = round(simular_fetch_odds(probabilidades['DC_12'], 'DC', VIGORISH_BTTS_DC), 2)
+with col_dc3:
+    exibir_analise_value(
+        label="Casa ou Fora (12)",
+        prob_modelo=probabilidades['DC_12'],
+        odd_betano=odd_betano_dc12,
+        bankroll=bankroll_total
+    )
 
-with col_over_2:
+# ====================================================================================
+# C. ANÁLISE: AMBAS MARCAM (BTTS)
+# ====================================================================================
+st.markdown("---")
+st.markdown("##### 3. Mercado: Ambas as Equipes Marcam (BTTS)")
+col_btts_sim, col_btts_nao = st.columns(2)
+
+# BTTS Sim
+odd_betano_btts_sim = round(simular_fetch_odds(probabilidades['BTTS_Sim'], 'BTTS', VIGORISH_BTTS_DC), 2)
+with col_btts_sim:
+    exibir_analise_value(
+        label="BTTS - SIM (Ambas Marcam)",
+        prob_modelo=probabilidades['BTTS_Sim'],
+        odd_betano=odd_betano_btts_sim,
+        bankroll=bankroll_total,
+        is_1x2=False
+    )
+
+# BTTS Não
+odd_betano_btts_nao = round(simular_fetch_odds(probabilidades['BTTS_Nao'], 'BTTS', VIGORISH_BTTS_DC), 2)
+with col_btts_nao:
+    exibir_analise_value(
+        label="BTTS - NÃO (Pelo menos 1 time passa em branco)",
+        prob_modelo=probabilidades['BTTS_Nao'],
+        odd_betano=odd_betano_btts_nao,
+        bankroll=bankroll_total,
+        is_1x2=False
+    )
+
+# ====================================================================================
+# D. ANÁLISE: TOTAL DE GOLS (OVER/UNDER)
+# ====================================================================================
+st.markdown("---")
+st.markdown("##### 4. Mercado: Total de Gols (Mais/Menos)")
+
+# --- OVER/UNDER 2.5 (Principal) ---
+col_ou_2_5_prob, col_ou_2_5_val = st.columns(2)
+odd_betano_over_2_5 = round(simular_fetch_odds(probabilidades['OU_O2.5'], 'OU', VIGORISH_OU), 2)
+odd_betano_under_2_5 = round(simular_fetch_odds(probabilidades['OU_U2.5'], 'OU', VIGORISH_OU), 2)
+
+with col_ou_2_5_prob:
+    st.metric(label="Prob. Mais de 2.5 Gols", value=f"{probabilidades['OU_O2.5'] * 100:.2f}%")
+    st.metric(label="Prob. Menos de 2.5 Gols", value=f"{probabilidades['OU_U2.5'] * 100:.2f}%")
+
+with col_ou_2_5_val:
     exibir_analise_value(
         label="Over 2.5 Gols",
-        prob_modelo=prob_over_2_5,
+        prob_modelo=probabilidades['OU_O2.5'],
         odd_betano=odd_betano_over_2_5,
         bankroll=bankroll_total,
         is_1x2=False
     )
+    exibir_analise_value(
+        label="Under 2.5 Gols",
+        prob_modelo=probabilidades['OU_U2.5'],
+        odd_betano=odd_betano_under_2_5,
+        bankroll=bankroll_total,
+        is_1x2=False
+    )
+
+# --- OVER/UNDER Adicionais (1.5, 3.5, 4.5) em expansor ---
+with st.expander("Ver Mais Mercados de Gols (Over/Under 1.5, 3.5, 4.5)"):
     
-st.markdown("---")
-st.markdown("##### ➡️ Análise: Top 3 Placares Exatos")
-
-top_scores = get_top_n_scores(prob_matrix, n=3)
-
-placar_data = []
-for item in top_scores:
-    prob = item['prob']
-    odd_justa = calcular_odd_justa(prob)
-    # Odd para placares exatos costuma ter um vigorish um pouco maior
-    odd_simulada = round(simular_fetch_odds(prob, 'Placar', VIGORISH_1X2 + 0.02), 2) 
-    
-    prob_implicita = 1 / odd_simulada 
-    value_bet = (prob - prob_implicita) * 100 
-    
-    analise_valor = f"{value_bet:.2f}%"
-    aposta = 0.0
-    
-    if odd_simulada > odd_justa:
-        aposta = calcular_kelly_criterion(prob, odd_simulada, bankroll_total)
-        analise_valor = f"🔥 VALUE BET ({analise_valor})!"
-
-    placar_data.append({
-        "Placar": item['score'],
-        "Prob. IA (%)": round(prob * 100, 2),
-        "Odd Justa": round(odd_justa, 2),
-        "Odd Simulada": odd_simulada,
-        "Análise de Valor": analise_valor,
-        "Aposta Sugerida (R$)": round(aposta, 2) if aposta > 0.0 else "R$ 0.00"
-    })
-
-df_placar = pd.DataFrame(placar_data)
-st.dataframe(df_placar, use_container_width=True, hide_index=True)
-
-
-st.markdown("---")
-st.markdown("#### 🧠 Matriz de Probabilidade de Placar Exato (Modelo Poisson)")
-st.caption("A probabilidade de cada placar (em percentual) com base nas forças ajustadas.")
-
-# Formata a matriz para melhor visualização
-df_prob_matrix = pd.DataFrame(prob_matrix * 100, 
-                              index=[f'{TIME_CASA_EXIBICAO}: {i}' for i in range(prob_matrix.shape[0])], 
-                              columns=[f'{TIME_FORA_EXIBICAO}: {j}' for j in range(prob_matrix.shape[1])])
-
-df_prob_matrix = df_prob_matrix.round(2)
-
-st.dataframe(
-    df_prob_matrix,
-    use_container_width=True,
-)
+    st.markdown("###### Over/Under 1.5")
+    col_ou_1_5_1, col_ou_1_5_2 = st.columns(2)
+    with col_ou_1_5_1:
+        odd_betano_over_1_5 = round(simular_fetch_odds(probabilidades['OU_O1.5'], 'OU', VIGORISH_OU), 2)
+        exibir_analise_value(label="Over 1.5 Gols", prob_modelo=probabilidades['OU_O1.5'], odd_betano=odd_betano_over_1_5, bankroll=bankroll_total, is_1x2=False)
+    with col_ou_1_5_2:
+        odd_betano_under_1_5 = round(simular_fetch_odds(probabilidades['OU_U1.5'], 'OU', VIGORISH_OU), 2)
+        exibir_analise_value(label="Under 1
