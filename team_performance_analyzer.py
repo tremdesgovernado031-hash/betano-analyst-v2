@@ -51,19 +51,14 @@ def calcular_forcas(df, time_casa, time_fora):
     media_gols_casa = df[df['Local'] == 'C']['Gols_Feitos'].mean()
     media_gols_fora = df[df['Local'] == 'F']['Gols_Feitos'].mean()
     
-    # Média global de gols feitos
-    # media_total_gols = df['Gols_Feitos'].mean() # Não está sendo usada
-    
     # 2. Cálculo das Médias Específicas dos Times
     
     # Dados do Time de Casa (Time A)
     df_a = df[df['Time'] == time_casa]
     df_a_casa = df_a[df_a['Local'] == 'C']
-    # df_a_fora = df_a[df_a['Local'] == 'F'] # Não está sendo usada
 
     # Dados do Time Visitante (Time B)
     df_b = df[df['Time'] == time_fora]
-    # df_b_casa = df_b[df_b['Local'] == 'C'] # Não está sendo usada
     df_b_fora = df_b[df_b['Local'] == 'F']
 
     # 3. Cálculo das Forças (STRENGTHS)
@@ -197,9 +192,16 @@ df_prob_matrix = pd.DataFrame(prob_matrix * 100,
                               index=[f'{TIME_CASA}: {i}' for i in range(prob_matrix.shape[0])], 
                               columns=[f'{TIME_FORA}: {j}' for j in range(prob_matrix.shape[1])])
 
-# Aplica o estilo e a formatação separadamente, depois passa o objeto Styler para o Streamlit
-styler_matrix = df_prob_matrix.style.background_gradient(cmap='plasma', axis=None).format(precision=2)
+# APLICANDO A FORMATAÇÃO E ESTILO DIRETAMENTE NO OBJETO STYLER (CORREÇÃO APLICADA AQUI)
+# A correção remove o argumento 'precision' do st.dataframe e aplica a formatação
+# de precisão e gradiente diretamente no objeto Styler.
+styler_matrix = (
+    df_prob_matrix.style
+    .background_gradient(cmap='plasma', axis=None)
+    .format(precision=2)
+)
 
+# Passando o objeto Styler para o Streamlit
 st.dataframe(
     styler_matrix,
     use_container_width=True,
