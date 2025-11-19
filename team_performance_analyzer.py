@@ -52,18 +52,18 @@ def calcular_forcas(df, time_casa, time_fora):
     media_gols_fora = df[df['Local'] == 'F']['Gols_Feitos'].mean()
     
     # Média global de gols feitos
-    media_total_gols = df['Gols_Feitos'].mean()
+    # media_total_gols = df['Gols_Feitos'].mean() # Não está sendo usada
     
     # 2. Cálculo das Médias Específicas dos Times
     
     # Dados do Time de Casa (Time A)
     df_a = df[df['Time'] == time_casa]
     df_a_casa = df_a[df_a['Local'] == 'C']
-    df_a_fora = df_a[df_a['Local'] == 'F']
+    # df_a_fora = df_a[df_a['Local'] == 'F'] # Não está sendo usada
 
     # Dados do Time Visitante (Time B)
     df_b = df[df['Time'] == time_fora]
-    df_b_casa = df_b[df_b['Local'] == 'C']
+    # df_b_casa = df_b[df_b['Local'] == 'C'] # Não está sendo usada
     df_b_fora = df_b[df_b['Local'] == 'F']
 
     # 3. Cálculo das Forças (STRENGTHS)
@@ -116,25 +116,38 @@ def calcular_probabilidade_poisson(lambda_a, lambda_b):
 
     return prob_matrix
 
-def calcular_mercados_over_under(prob_matrix):
-    """Calcula as probabilidades dos mercados Mais/Menos Gols (Over/Under)."""
+def calcular_mercados(prob_matrix):
+    """Calcula as probabilidades dos mercados Mais/Menos Gols (Over/Under) e 1X2."""
     
     prob_total = prob_matrix.sum() 
     
-    # Over 1.5 Gols (Gols totais >= 2)
-    prob_under_1_5 = prob_matrix[0, 0] + prob_matrix[0, 1] + prob_matrix[1, 0]
-    prob_over_1_5 = prob_total - prob_under_1_5
-    
-    # Recalculando Over 2.5 de forma clara (Gols totais >= 3)
+    prob_vitoria_casa = 0
+    prob_empate = 0
+    prob_vitoria_fora = 0
     prob_under_2_5_calc = 0
+    
     for i in range(prob_matrix.shape[0]):
         for j in range(prob_matrix.shape[1]):
+            # 1X2 - Cálculo das probabilidades do resultado final
+            if i > j:
+                prob_vitoria_casa += prob_matrix[i, j]
+            elif i == j:
+                prob_empate += prob_matrix[i, j]
+            else: # i < j
+                prob_vitoria_fora += prob_matrix[i, j]
+            
+            # Under 2.5 - Cálculo da probabilidade de menos de 3 gols
             if i + j <= 2:
                 prob_under_2_5_calc += prob_matrix[i, j]
                 
     prob_over_2_5 = prob_total - prob_under_2_5_calc
-
-    return prob_over_1_5, prob_over_2_5
+    
+    # Under 1.5 - Cálculo da probabilidade de menos de 2 gols
+    prob_under_1_5 = prob_matrix[0, 0] + prob_matrix[0, 1] + prob_matrix[1, 0]
+    prob_over_1_5 = prob_total - prob_under_1_5
+    
+    # Retorna todas as probabilidades (Over/Under e 1X2)
+    return prob_over_1_5, prob_over_2_5, prob_vitoria_casa, prob_empate, prob_vitoria_fora
 
 # --- 3. EXECUÇÃO E INTERFACE STREAMLIT ---
 
@@ -192,8 +205,8 @@ st.dataframe(
 )
 
 
-# 4. Cálculo dos Mercados de Apostas (Over/Under)
-prob_over_1_5, prob_over_2_5 = calcular_mercados_over_under(prob_matrix)
+# 4. Cálculo dos Mercados de Apostas (Over/Under e 1X2)
+prob_over_1_5, prob_over_2_5, prob_vitoria_casa, prob_empate, prob_vitoria_fora = calcular_mercados(prob_matrix)
 
 # Cálculo da ODD JUSTA
 def calcular_odd_justa(probabilidade):
@@ -202,11 +215,62 @@ def calcular_odd_justa(probabilidade):
         return 1 / probabilidade
     return float('inf')
 
-odd_justa_over_2_5 = calcular_odd_justa(prob_over_2_5)
+
+st.markdown("---")
+st.markdown("#### 💰 Sugestões para Bilhetes do Dia (Análise de Valor)")
+
+st.markdown("##### ➡️ Análise: Vencedor da Partida (1X2)")
+
+col_1x2_1, col_1x2_2, col_1x2_3, col_1x2_4 = st.columns(4)
+
+# ODD JUSTA para 1 (Vitória Casa)
+odd_justa_casa = calcular_odd_justa(prob_vitoria_casa)
+
+with col_1x2_1:
+    st.metric(label=f"Prob. da IA: Vitória {TIME_CASA} (1)", value=f"{prob_vitoria_casa * 100:.2f}%")
+    
+with col_1x2_2:
+    st.metric(label="Prob. da IA: Empate (X)", value=f"{prob_empate * 100:.2f}%")
+    
+with col_1x2_3:
+    st.metric(label=f"Prob. da IA: Vitória {TIME_FORA} (2)", value=f"{prob_vitoria_fora * 100:.2f}%")
+
+with col_1x2_4:
+    st.metric(label="Odd Justa da IA (Vitória Casa)", value=f"{odd_justa_casa:.2f}")
+
+
+st.markdown("##### Odd da Betano e Value Bet (Vitória Casa)")
+col_odd_1, col_odd_2 = st.columns(2)
+
+with col_odd_1:
+    odd_betano_casa = st.number_input(
+        f"Odd da Betano (Vitória {TIME_CASA})", 
+        min_value=1.01, 
+        max_value=10.00, 
+        value=1.90, # Valor de exemplo
+        step=0.01, 
+        format="%.2f",
+        key='odd_input_1x2'
+    )
+
+with col_odd_2:
+    prob_implicita_casa = 1 / odd_betano_casa 
+    value_bet_casa = (prob_vitoria_casa - prob_implicita_casa) * 100 
+    
+    st.markdown("**Análise de Valor (VALUE)**")
+    
+    if odd_betano_casa > odd_justa_casa and value_bet_casa > 1.0:
+        st.success(f"VALUE BET IDENTIFICADO! (+{value_bet_casa:.2f}%)")
+        st.markdown(f"**Sugestão:** Apostar na Vitória do {TIME_CASA} (Odd {odd_betano_casa})")
+    else:
+        st.warning(f"Odd da Betano não compensa o risco calculado pela IA. (Valor: {value_bet_casa:.2f}%)")
 
 
 st.markdown("---")
-st.markdown("#### 💰 Sugestões para Bilhetes do Dia (Análise de Valor O/U)")
+st.markdown("##### ➡️ Análise: Mais/Menos Gols (Over/Under)")
+
+odd_justa_over_2_5 = calcular_odd_justa(prob_over_2_5)
+
 
 col_over_1, col_over_2, col_over_3, col_over_4 = st.columns(4)
 
@@ -228,7 +292,7 @@ with col_over_4:
         value=2.10, 
         step=0.01, 
         format="%.2f",
-        key='odd_input'
+        key='odd_input_over'
     ) 
     
     prob_implicita = 1 / odd_betano_over_2_5 
@@ -241,4 +305,3 @@ with col_over_4:
         st.markdown(f"**Sugestão:** Apostar no Over 2.5 Gols (Odd {odd_betano_over_2_5})")
     else:
         st.warning(f"Odd da Betano não compensa o risco calculado pela IA. (Valor: {value_bet:.2f}%)")
-        st.markdown(f"Odd Betano atual: **{odd_betano_over_2_5}**")
