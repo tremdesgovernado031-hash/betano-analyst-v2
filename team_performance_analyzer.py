@@ -8,29 +8,37 @@ import time
 # Configuração da Página Streamlit (A Interface do Aplicativo)
 st.set_page_config(layout="wide", page_title="Betano Analyst AI Prototype - Força Ofensiva")
 
+# --- DEFINIÇÕES GLOBAIS DE MARGEM ---
+# Definimos o Vigorish (Margem de Lucro da Casa de Apostas) para simulação.
+VIGORISH_1X2 = 0.05  # 5% de margem para o mercado 1X2 (Vitória Casa/Empate/Vitória Fora)
+VIGORISH_OU = 0.04   # 4% de margem para o mercado Over/Under
+# -----------------------------------
+
+
 # --- FUNÇÃO DE MOCK ODDS (SIMULAÇÃO DA BUSCA POR ODDS DA BETANO) ---
 
-# Nota: Não é possível extrair odds em tempo real de casas de apostas devido a limitações de ambiente
-# e termos de serviço. Esta função simula odds plausíveis com base na probabilidade do modelo.
-def simular_fetch_odds(prob, time_nome, mercado_tipo, margin_percent=0.06):
+def simular_fetch_odds(prob, mercado_tipo, vigorish_percent):
     """
     Simula a busca por odds no mercado. As odds são baseadas na probabilidade calculada 
-    pela IA (Fair Odd) ajustadas por uma margem de lucro da casa de apostas (ex: 6%).
+    pela IA (Fair Odd) ajustadas pela margem de lucro da casa de apostas (Vigorish).
+    
+    A Odd Bookie é calculada para ser MENOR que a Fair Odd, simulando o lucro da casa.
     """
     
     # 1. Calculamos a Odd Justa (Fair Odd)
     fair_odd = 1 / prob if prob > 0 else 100
     
-    # 2. Adicionamos a margem da casa de apostas (simulação do "Vigorish")
-    # Odd com margem = Fair Odd * (1 + Margem)
-    bookie_odd = fair_odd * (1 + margin_percent)
+    # 2. Aplicamos a Margem (Vigorish)
+    # Fator de Vigorish: 1 / (1 + Margem). Se Margem=5%, Fator = 1/1.05 = 0.9523
+    # Este fator garante que a Odd Bookie seja menor que a Fair Odd.
+    vigorish_factor = 1 / (1 + vigorish_percent)
     
-    # 3. Adicionamos um pequeno ruído aleatório para simular a variação de mercado
-    # O ruído é baseado em 5% da margem
-    noise_factor = 1 + (random.uniform(-1, 1) * 0.05 * margin_percent)
+    bookie_odd = fair_odd * vigorish_factor
+    
+    # 3. Adicionamos um ruído aleatório muito pequeno (max 0.5% de variação)
+    noise_factor = 1 + (random.uniform(-0.005, 0.005)) 
     final_odd = bookie_odd * noise_factor
     
-    # Se a odd for muito baixa, garantimos um mínimo
     final_odd = max(1.01, final_odd)
 
     return round(final_odd, 2)
@@ -343,7 +351,7 @@ col_prob_1, col_prob_X, col_prob_2 = st.columns(3)
 
 # 1. Vitório Casa (1)
 odd_justa_casa = calcular_odd_justa(prob_vitoria_casa)
-odd_betano_casa = simular_fetch_odds(prob_vitoria_casa, TIME_CASA_EXIBICAO, '1X2')
+odd_betano_casa = simular_fetch_odds(prob_vitoria_casa, '1X2', VIGORISH_1X2)
 prob_implicita_casa = 1 / odd_betano_casa 
 value_bet_casa = (prob_vitoria_casa - prob_implicita_casa) * 100 
 
@@ -359,7 +367,7 @@ with col_prob_1:
         
 # 2. Empate (X)
 odd_justa_empate = calcular_odd_justa(prob_empate)
-odd_betano_empate = simular_fetch_odds(prob_empate, 'Empate', '1X2')
+odd_betano_empate = simular_fetch_odds(prob_empate, '1X2', VIGORISH_1X2)
 prob_implicita_empate = 1 / odd_betano_empate 
 value_bet_empate = (prob_empate - prob_implicita_empate) * 100 
 
@@ -375,7 +383,7 @@ with col_prob_X:
 
 # 3. Vitória Fora (2)
 odd_justa_fora = calcular_odd_justa(prob_vitoria_fora)
-odd_betano_fora = simular_fetch_odds(prob_vitoria_fora, TIME_FORA_EXIBICAO, '1X2')
+odd_betano_fora = simular_fetch_odds(prob_vitoria_fora, '1X2', VIGORISH_1X2)
 prob_implicita_fora = 1 / odd_betano_fora 
 value_bet_fora = (prob_vitoria_fora - prob_implicita_fora) * 100 
 
@@ -394,7 +402,7 @@ st.markdown("---")
 st.markdown("##### ➡️ Análise: Mais/Menos Gols (Over/Under)")
 
 odd_justa_over_2_5 = calcular_odd_justa(prob_over_2_5)
-odd_betano_over_2_5 = simular_fetch_odds(prob_over_2_5, 'Over 2.5', 'Over/Under', margin_percent=0.04) # Margem menor para Over/Under
+odd_betano_over_2_5 = simular_fetch_odds(prob_over_2_5, 'Over/Under', VIGORISH_OU)
 
 prob_implicita_over = 1 / odd_betano_over_2_5 
 value_bet_over = (prob_over_2_5 - prob_implicita_over) * 100 
